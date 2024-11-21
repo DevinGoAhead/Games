@@ -13,7 +13,7 @@ using namespace Eigen;
 
 namespace rst
 {
-	//My new implement
+	//Devin
 	//template<typename T>
 	struct Rectangle
 	{
@@ -95,7 +95,10 @@ namespace rst
         void rasterize_triangle(const Triangle& t);
 
         // VERTEX SHADER -> MVP -> Clipping -> /.W -> VIEWPORT -> DRAWLINE/DRAWTRI -> FRAGSHADER
+
+		//Devin
 		Rectangle GetBoundingBox(const Triangle& t)const;
+		float GetCoverageRatio(int x, int y, const Triangle& t)const;
 
     private:
         Eigen::Matrix4f model;

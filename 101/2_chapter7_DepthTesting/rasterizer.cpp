@@ -49,13 +49,32 @@ static bool insideTriangle(int x, int y, const Vector3f* _v)
 	Vector3f v2;
 	for(int i = 0; i < 3; ++i)
 	{
-		int cur = i % 3; 
+		int cur = i % 3;
 		int next = (i + 1) % 3;
 
-		v1 << (_v[next](0) - _v[cur](0)), (_v[next](1) - _v[cur](1)), 0;
-		v2 << (x - _v[cur](0)), (y - _v[cur](1)), 0;
+		v1 << (_v[next](0) - _v[cur](0)), (_v[next](1) - _v[cur](1)), 0.f;
+		v2 << (x - _v[cur](0)), (y - _v[cur](1)), 0.f;
 
 		if (v1.cross(v2).z() < 0)
+			return false;
+	}
+	return true;
+}
+
+static bool insideTriangle(float x, float y, const Vector3f* _v)//for MSAA
+{   
+    // TODO : Implement this function to check if the point (x, y) is inside the triangle represented by _v[0], _v[1], _v[2]
+	Vector3f v1;
+	Vector3f v2;
+	for(int i = 0; i < 3; ++i)
+	{
+		int cur = i % 3;
+		int next = (i + 1) % 3;
+
+		v1 << (_v[next](0) - _v[cur](0)), (_v[next](1) - _v[cur](1)), 0.f;
+		v2 << (x - _v[cur](0)), (y - _v[cur](1)), 0.f;
+
+		if (v1.cross(v2).z() < 0.f)
 			return false;
 	}
 	return true;
@@ -124,14 +143,15 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t) {
    
     // TODO : Find out the bounding box of current triangle.
 	Rectangle rec = GetBoundingBox(t);
-	std::cout << "Bounding Box: " << rec._left << ", " << rec._right << ", " << rec._bot << ", " << rec._top << std::endl;
+	//std::cout << "Bounding Box: " << rec._left << ", " << rec._right << ", " << rec._bot << ", " << rec._top << std::endl;
     // iterate through the pixel and find if the current pixel is inside the triangle
-
+	float ratio = 0.f;
 	for(int y = rec._bot; y < rec._top; ++y)
 	{
 		for(int x = rec._left; x < rec._right; ++x)
 		{
-			if(insideTriangle(x, y, t.v))
+			ratio = GetCoverageRatio(x, y, t);
+			if(ratio > 0.f)
 			{
 				
 				// 插值求得 当前像素 z 值
@@ -139,20 +159,20 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t) {
 				float w_reciprocal = 1.0/(alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
 				float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
 				z_interpolated *= w_reciprocal;
-				long indx = y * width + x;
-				
-				//long indx = get_index(x, y);// 为什么不是 y * width + x
+				//long indx = y * width + x;
+				long indx = get_index(x, y);
 				if(z_interpolated < depth_buf[indx])
 				{
 					//frame_buf[indx] = Vector3f(255.f,185.f,125.f);
-					frame_buf[indx] = t.getColor();
+					frame_buf[indx] = t.getColor() * ratio;
 					
 					// Vector3f curPoint(x, y, 0);
 					// set_pixel(curPoint, t.getColor());
 
 					depth_buf[indx] = z_interpolated;
-					//std::cout << " x: " << x <<" y: "<< y << " z " << z_interpolated <<std::endl;
-					//Sleep(100);
+					// if(ratio != 0.5f)
+					// 	std::cout << " x: " << x <<" y: "<< y << " z " << z_interpolated << " ratio: " << ratio << std::endl;
+					// Sleep(10);
 				}
 			}
 		}
@@ -223,6 +243,18 @@ typename rst::Rectangle rst::rasterizer::GetBoundingBox(const Triangle& t)const
 	rec._right = std::max({t.v[0](0),t.v[1](0),t.v[2](0)});
 	rec._left = std::min({t.v[0](0),t.v[1](0),t.v[2](0)});
 	return rec;
+}
+
+float rst::rasterizer::GetCoverageRatio(int x, int y, const Triangle& t)const
+{
+	float ratio = 0.f;
+	float offsets [4][2] = {{-0.25f, -0.25f}, {+0.25f, -0.25f}, {-0.25f, +0.25f}, {+0.25f, +0.25f}};
+	for(const auto& offset : offsets)
+	{
+		if(insideTriangle((float)x + offset[0], (float)y + offset[1], t.v))
+			ratio += 0.25f;
+	}
+	return ratio;
 }
 
 // clang-format on
