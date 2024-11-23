@@ -143,136 +143,63 @@ void rst::rasterizer::draw(pos_buf_id pos_buffer, ind_buf_id ind_buffer, col_buf
 
 //Screen space rasterization
 void rst::rasterizer::rasterize_triangle(const Triangle& t) {
-    auto v = t.toVector4();
-   
-    // TODO : Find out the bounding box of current triangle.
-	Rectangle rec = GetBoundingBox(t);
-	//std::cout << "Bounding Box: " << rec._left << ", " << rec._right << ", " << rec._bot << ", " << rec._top << std::endl;
-    
-	std::vector<Eigen::Vector3f> frame_buf_temp(4 * height * width, Eigen::Vector3f{0, 0, 0});
-	
-	std::vector<float> depth_buf_temp(4 * height * width, std::numeric_limits<float>::infinity());
-	
-	// iterate through the pixel and find if the current pixel is inside the triangle
-	for(int y = 2 * rec._bot; y < 2 * rec._top; ++y)
-	{
-		for(int x = 2 * rec._left; x < 2 * rec._right; ++x)
-		{
-			if(insideTriangle(x / 2, y / 2, t.v))
-			{
-				// 插值求得 当前像素 z 值
-				auto[alpha, beta, gamma] = computeBarycentric2D((float)x / 2, (float)y / 2, t.v);//坐标缩小2倍计算插值
-				float w_reciprocal = 1.0/(alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
-				float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
-				z_interpolated *= w_reciprocal;
+    auto v = t.toVector4();  // 获取三角形顶点的齐次坐标
+    Rectangle rec = GetBoundingBox(t);  // 获取三角形的包围盒
 
-				long indx_temp = (2 * height - 1 - y) * 2 * width + x;
-				if(z_interpolated < depth_buf_temp[indx_temp])
-				{
-					frame_buf_temp[indx_temp] = t.getColor();
-					depth_buf_temp[indx_temp] = z_interpolated;
-					//std::cout << "indx_temp: "<< indx_temp <<" x: " << x <<" y: "<< y << " z " << z_interpolated << std::endl;
-				}
-			}
-		}
-	}
+    // 创建临时缓冲区，用于存储 2x2 超采样的颜色和深度
+    std::vector<Eigen::Vector3f> frame_buf_temp(4 * frame_buf.size(), Eigen::Vector3f{0, 0, 0});
+    std::vector<float> depth_buf_temp(4 * depth_buf.size(), std::numeric_limits<float>::infinity());
 
-	// 方法一: 空域中卷积
-	float filter[2][2] ={{1.f/4.f, 1.f/4.f},
-						{1.f/4.f, 1.f/4.f}};
+    // 遍历包围盒内的像素，使用 2x2 SSAA 进行采样
+    for (int y = rec._bot; y < rec._top; ++y) {
+        for (int x = rec._left; x < rec._right; ++x) {
+            Eigen::Vector3f color_sum(0, 0, 0);  // 颜色累加
+            float depth_sum = 0.0f;              // 深度累加
+            int samples_in_triangle = 0;         // 计数子像素中在三角形内的数量
 
-	for(int y = rec._bot; y < rec._top; ++y)
-	{
-		for(int x = rec._left; x < rec._right; ++x)
-		{
-			Vector3f sum_frame(0.f, 0.f, 0.f);
-			//Vector3f test(0.f, 0.f, 0.f);
-			float sum_depth = 0.f;
-			long indx = get_index(x, y);
-			for(int ky = 0; ky < 2; ++ky)
-			{
-				for(int kx = 0; kx < 2; ++kx)
-				{
-					long indx_temp = (2 * height - 1 - (2 * y + ky)) * 2 * width + (2 * x + kx);
-					// if (frame_buf_temp[indx_temp] != test)
-					// 	std::cout << " x: " << x <<" y: "<< y << " z " << sum_depth << " color " << sum_frame << std::endl;
-					sum_frame += frame_buf_temp[indx_temp] * filter[ky][kx];
-					sum_depth += depth_buf_temp[indx_temp] * filter[ky][kx];
-					//sum_depth = std::min(sum_depth, depth_buf_temp[indx_temp]);
-				}
-			}
-			
-			frame_buf[indx] = sum_frame;
-			depth_buf[indx] = sum_depth;
-		}
-	}
+            // 2x2 超采样：遍历每个像素中的 4 个子像素
+            for (int sub_y = 0; sub_y < 2; ++sub_y) {
+                for (int sub_x = 0; sub_x < 2; ++sub_x) {
+                    // 计算子像素位置
+                    float sample_x = x + (sub_x + 0.5f) / 2.0f;
+                    float sample_y = y + (sub_y + 0.5f) / 2.0f;
 
-    // If so, use the following code to get the interpolated z value.
-    //auto[alpha, beta, gamma] = computeBarycentric2D(x, y, t.v);
-    //float w_reciprocal = 1.0/(alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
-    //float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
-    //z_interpolated *= w_reciprocal;
+                    // 检查子像素是否在三角形内
+                    if (insideTriangle(sample_x, sample_y, t.v)) {
+                        // 在三角形内，增加计数
+                        samples_in_triangle++;
 
-    // TODO : set the current pixel (use the set_pixel function) to the color of the triangle (use getColor function) if it should be painted.
+                        // 计算子像素的重心坐标并插值深度
+                        auto [alpha, beta, gamma] = computeBarycentric2D(sample_x, sample_y, t.v);
+                        float w_reciprocal = 1.0f / (alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
+                        float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
+                        z_interpolated *= w_reciprocal;
+
+                        // 获取子像素的全局索引
+                        long subpixel_index = ((height - y - 1) * width + x) * 4 + (sub_y * 2 + sub_x);
+
+                        // 深度测试
+                        if (z_interpolated < depth_buf_temp[subpixel_index]) {
+                            depth_buf_temp[subpixel_index] = z_interpolated;
+                            frame_buf_temp[subpixel_index] = t.getColor();
+                            color_sum += t.getColor() / 4;
+                            depth_sum += z_interpolated / 4;
+                        }
+                    }
+                }
+            }
+
+            // 如果有子像素在三角形内，根据子像素数量对颜色和深度求加权平均
+            if (samples_in_triangle > 0) {
+                color_sum *= (samples_in_triangle / 4.0f);
+                depth_sum *= (samples_in_triangle / 4.0f);
+                long pixel_index = get_index(x, y);
+                frame_buf[pixel_index] = color_sum;
+                depth_buf[pixel_index] = depth_sum;
+            }
+        }
+    }
 }
-// void rst::rasterizer::rasterize_triangle(const Triangle& t) {
-//     auto v = t.toVector4();  // 获取三角形顶点的齐次坐标
-//     Rectangle rec = GetBoundingBox(t);  // 获取三角形的包围盒
-
-//     // 创建临时缓冲区，用于存储 2x2 超采样的颜色和深度
-//     std::vector<Eigen::Vector3f> frame_buf_temp(4 * frame_buf.size(), Eigen::Vector3f{0, 0, 0});
-//     std::vector<float> depth_buf_temp(4 * depth_buf.size(), std::numeric_limits<float>::infinity());
-
-//     // 遍历包围盒内的像素，使用 2x2 SSAA 进行采样
-//     for (int y = rec._bot; y < rec._top; ++y) {
-//         for (int x = rec._left; x < rec._right; ++x) {
-//             Eigen::Vector3f color_sum(0, 0, 0);  // 颜色累加
-//             float depth_sum = 0.0f;              // 深度累加
-//             int samples_in_triangle = 0;         // 计数子像素中在三角形内的数量
-
-//             // 2x2 超采样：遍历每个像素中的 4 个子像素
-//             for (int sub_y = 0; sub_y < 2; ++sub_y) {
-//                 for (int sub_x = 0; sub_x < 2; ++sub_x) {
-//                     // 计算子像素位置
-//                     float sample_x = x + (sub_x + 0.5f) / 2.0f;
-//                     float sample_y = y + (sub_y + 0.5f) / 2.0f;
-
-//                     // 检查子像素是否在三角形内
-//                     if (insideTriangle(sample_x, sample_y, t.v)) {
-//                         // 在三角形内，增加计数
-//                         samples_in_triangle++;
-
-//                         // 计算子像素的重心坐标并插值深度
-//                         auto [alpha, beta, gamma] = computeBarycentric2D(sample_x, sample_y, t.v);
-//                         float w_reciprocal = 1.0f / (alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
-//                         float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
-//                         z_interpolated *= w_reciprocal;
-
-//                         // 获取子像素的全局索引
-//                         long subpixel_index = ((height - y - 1) * width + x) * 4 + (sub_y * 2 + sub_x);
-
-//                         // 深度测试
-//                         if (z_interpolated < depth_buf_temp[subpixel_index]) {
-//                             depth_buf_temp[subpixel_index] = z_interpolated;
-//                             frame_buf_temp[subpixel_index] = t.getColor();
-//                             color_sum += t.getColor() / 4;
-//                             depth_sum += z_interpolated / 4;
-//                         }
-//                     }
-//                 }
-//             }
-
-//             // 如果有子像素在三角形内，根据子像素数量对颜色和深度求加权平均
-//             if (samples_in_triangle > 0) {
-//                 color_sum *= (samples_in_triangle / 4.0f);
-//                 depth_sum *= (samples_in_triangle / 4.0f);
-//                 long pixel_index = get_index(x, y);
-//                 frame_buf[pixel_index] = color_sum;
-//                 depth_buf[pixel_index] = depth_sum;
-//             }
-//         }
-//     }
-// }
 
 void rst::rasterizer::set_model(const Eigen::Matrix4f& m)
 {
