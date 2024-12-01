@@ -155,7 +155,8 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t) {
         for (int x = rec._left; x < rec._right; ++x) {
             Eigen::Vector3f color_sum(0, 0, 0);  // 颜色累加
             float depth_sum = 0.0f;              // 深度累加
-            int samples_in_triangle = 0;         // 计数子像素中在三角形内的数量
+            // int samples_in_triangle = 0;         // 计数子像素中在三角形内的数量
+			bool isSubSampleIn = false;         // 是否有子采样点才三角形内- 替换 - 上一行代码
 
             // 2x2 超采样：遍历每个像素中的 4 个子像素
             for (int sub_y = 0; sub_y < 2; ++sub_y) {
@@ -167,7 +168,8 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t) {
                     // 检查子像素是否在三角形内
                     if (insideTriangle(sample_x, sample_y, t.v)) {
                         // 在三角形内，增加计数
-                        samples_in_triangle++;
+                        //samples_in_triangle = 1;
+						isSubSampleIn = true; // 替换 - 上一行代码
 
                         // 计算子像素的重心坐标并插值深度
                         auto [alpha, beta, gamma] = computeBarycentric2D(sample_x, sample_y, t.v);
@@ -182,17 +184,21 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t) {
                         if (z_interpolated < depth_buf_temp[subpixel_index]) {
                             depth_buf_temp[subpixel_index] = z_interpolated;
                             frame_buf_temp[subpixel_index] = t.getColor();
-                            color_sum += t.getColor() / 4;
-                            depth_sum += z_interpolated / 4;
+                            // color_sum += t.getColor() / 4;
+                            // depth_sum += z_interpolated / 4;
+							color_sum += t.getColor(); // 替换 - 前两行代码
+                            depth_sum += z_interpolated; // 替换
                         }
                     }
                 }
             }
 
             // 如果有子像素在三角形内，根据子像素数量对颜色和深度求加权平均
-            if (samples_in_triangle > 0) {
-                color_sum *= (samples_in_triangle / 4.0f);
-                depth_sum *= (samples_in_triangle / 4.0f);
+            if (isSubSampleIn) {
+                // color_sum *= (samples_in_triangle / 4.0f);
+                // depth_sum *= (samples_in_triangle / 4.0f);
+				color_sum /= 4.0f; // 替换 - 前两行代码
+               	depth_sum /= 4.0f; // 替换 -
                 long pixel_index = get_index(x, y);
                 frame_buf[pixel_index] = color_sum;
                 depth_buf[pixel_index] = depth_sum;
