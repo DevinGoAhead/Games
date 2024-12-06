@@ -225,7 +225,12 @@ void rst::rasterizer::draw(std::vector<Triangle *> &TriangleList) {
                 mvp * t->v[2]
         };
 
-        //Homogeneous division, 经过投影变换后, 齐次坐标将被缩放, w不再为1, 因此这里要做齐次坐标标准化
+		// 上一版的 透视矫正插值是存在问题的, 为了完成正确的矫正插值,这里将归一化前的 w 分量的值保存下来
+		newtri.setW(0, v[0].w());
+		newtri.setW(1, v[1].w());
+		newtri.setW(2, v[2].w());
+
+        // Homogeneous division, 经过投影变换后, 齐次坐标将被缩放, w不再为1, 因此这里要做齐次坐标标准化
         for (auto& vec : v) {
             vec.x()/=vec.w();
             vec.y()/=vec.w();
@@ -233,26 +238,26 @@ void rst::rasterizer::draw(std::vector<Triangle *> &TriangleList) {
         }
 
 		/* 模型已经被转换到视图空间，所以法线也需要进行相同的转换
-		 * 直接应用 view * model 矩阵并不适用于法线的转换，这是因为法线的变换与顶点的变换有所不同, 法线需要使用逆转置矩阵进行变换：
-		 * ** 保持法线的正确方向：在进行非均匀缩放（例如在模型变换中）时，法线的方向可能会发生变化。使用逆转置矩阵可以纠正这种变化
-		 * ** 法线的变换规则：法线是向量，而不是点。对于向量的变换，使用逆转置矩阵可以确保法线在变换过程中保持正交性和单位长度
+		 * 直接应用 view * model 矩阵并不适用于法线的转换
+		 * 详见 onenote 笔记
 		 */
         Eigen::Matrix4f inv_trans = (view * model).inverse().transpose(); 
         Eigen::Vector4f n[] = {
-                inv_trans * to_vec4(t->normal[0], 0.0f),
+                inv_trans * to_vec4(t->normal[0], 0.0f),// 这里同时还构造了一个第四个分量为0 的四元组与 变换矩阵相乘
                 inv_trans * to_vec4(t->normal[1], 0.0f),
                 inv_trans * to_vec4(t->normal[2], 0.0f)
         };
 
-        //Viewport transformation, 视口变换
+        //Viewport transformation, 视口变换, 这个过程 w 分量并没有改变
+		// 这个过程的变换时线性的, 严格来说, 是仿射的, 三角形虽然形状变换了, 但这是等比的, 位置虽然变换了, 但相对位置没有改变
         for (auto & vert : v) // 将 v 转换到 屏幕空间中
         {
 			// ### 标准设备坐标系 ### 中的xy 在[-1, 1]范围, + 1 将其调整到[0, 2]范围
 			// 0.5 * width * 2, 将模型从标准化设备坐标系 变换至 屏幕坐标系中
             vert.x() = 0.5*width*(vert.x()+1.0);
             vert.y() = 0.5*height*(vert.y()+1.0);
-			// 在投影变换, 转换到 ### 标准设备坐标系 ### 时, z 值被压缩到了[-1, 1], 这里还原 z 值为初始值
-			// 将z坐标调整(放大 + 平移)至 [0.1, 50] 的范围
+			// 这里还原 z 值为初始值
+			// 在投影变换, 转换到 ### 标准设备坐标系 ### 时, z 值被压缩到了[-1, 1], 这里调整(放大 + 平移)至 [0.1, 50] 的范围
             vert.z() = vert.z() * f1 + f2;
         }
 
@@ -328,7 +333,7 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t, const std::array<Eig
     // Use: Instead of passing the triangle's color directly to the frame buffer, pass the color to the shaders first to get the final color;
     // Use: auto pixel_color = fragment_shader(payload);
 	
-	auto v = t.toVector4();  // 获取三角形顶点的齐次坐标
+	auto v = t.toVector4();
 	const Eigen::Vector3f *col = t.color;  // 获取三角形顶点的颜色
 	const Eigen::Vector2f *tex_coor = t.tex_coords;  // 获取三角形顶点的纹理坐标
 	const Eigen::Vector3f *nor = t.normal;  // 获取三角形顶点的法线
@@ -340,30 +345,38 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t, const std::array<Eig
 		{
 			if(insideTriangle(x, y, t.v))// 判断子采样点是否在三角形内
 			{
-                auto [alpha, beta, gamma] = computeBarycentric2D(x, y, t.v);
-                float w_reciprocal = 1.0f / (alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
-                float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
+				// 这里将重构整个透视插值矫正
+
+				auto [alphaPrime, betaPrime, gammaPrime] = computeBarycentric2D(x, y, t.v); // 这是透视后,非线性空间的重心坐标
 				
-				Eigen::Vector3f col_interpolated =
-					alpha * col[0] / v[0].w() + beta * col[1] / v[1].w() + gamma * col[2] / v[2].w(); // 颜色插值
-				Eigen::Vector2f tex_coor_interpolated =
-					alpha * tex_coor[0] / v[0].w() + beta * tex_coor[1] / v[1].w() + gamma * tex_coor[2] / v[2].w(); // 纹理插值
+				float denom = alphaPrime / t.w[0] + betaPrime / t.w[1] + gammaPrime / t.w[2];
+				
+				float alpha = alphaPrime / (t.w[0] * denom);
+				float beta = betaPrime / (t.w[1] * denom);
+				float gamma = gammaPrime / (t.w[2] * denom);
+				if(alphaPrime < 0 || betaPrime < 0 || gammaPrime < 0 ||
+					alphaPrime + betaPrime + gammaPrime > 1.1f ||
+					alphaPrime + betaPrime + gammaPrime < 0.9f ||
+					alpha < 0 || beta < 0 || gamma < 0 ||
+					alpha + beta + gamma > 1.1f ||
+					alpha + beta + gamma < 0.9f
+				)
+				{assert(false);}
+				float z_interpolated = alpha * t.v[0].z() + beta * t.v[1].z() + gamma * t.v[2].z(); // z 插值
+				
+				Eigen::Vector3f col_interpolated = alpha * col[0] + beta * col[1] + gamma * col[2]; // 颜色插值
+				Eigen::Vector2f tex_coor_interpolated = alpha * tex_coor[0] + beta * tex_coor[1] + gamma * tex_coor[2]; // 纹理坐标插值
 				// if(tex_coor_interpolated.x() < 0 || tex_coor_interpolated.x() > 1 || tex_coor_interpolated.y() < 0 || tex_coor_interpolated.y() > 1)
 				// 	std::cout << tex_coor_interpolated.x() << ", " << tex_coor_interpolated.y() << std::endl;
 				if(tex_coor_interpolated.x() < 0) tex_coor_interpolated.x() = 0;
 				if(tex_coor_interpolated.x() > 1) tex_coor_interpolated.x() = 1;
 				if(tex_coor_interpolated.y() < 0) tex_coor_interpolated.y() = 0;
 				if(tex_coor_interpolated.y() > 1) tex_coor_interpolated.y() = 1;
-				Eigen::Vector3f nor_interpolated =
-					alpha * nor[0] / v[0].w() + beta * nor[1] / v[1].w() + gamma * nor[2] / v[2].w(); // 法线插值
-				Eigen::Vector3f view_pos_interpolated = 
-					alpha *view_pos[0] / v[0].w() + beta * view_pos[1] / v[1].w() + gamma * view_pos[2] / v[2].w(); // 视空间位置插值
+				
+				Eigen::Vector3f nor_interpolated = alpha * nor[0] + beta * nor[1] + gamma * nor[2];; // 法线插值
 
-				z_interpolated *= w_reciprocal;
-				col_interpolated *= w_reciprocal;
-				tex_coor_interpolated *= w_reciprocal;
-				nor_interpolated *= w_reciprocal;
-				view_pos_interpolated *= w_reciprocal;
+				// 虽然 alpha beta gamma 是经过投影变换(齐次未标准化) 空间的 重心坐标, 但由于相对视空间的变换都是线性的, 因此重心坐标仍然适用
+				Eigen::Vector3f view_pos_interpolated = alpha * view_pos[0] + beta * view_pos[1] + gamma * view_pos[2];; // 视空间坐标插值
 				
 				// 计算 子像素在临时缓冲区中的索引
 				//float index = ((height - y - 1 ) * width + x);

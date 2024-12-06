@@ -2,6 +2,9 @@
 // Created by LEI XU on 4/11/19.
 //
 
+//Devin
+// 为了能够正确的完成透视插值矫正, 这里我给class Triangle 增加了一个成员变量 w, 表示其进入非线性空间前的w 分量
+
 #ifndef RASTERIZER_TRIANGLE_H
 #define RASTERIZER_TRIANGLE_H
 
@@ -19,6 +22,9 @@ public:
     Vector3f normal[3]; //normal vector for each vertex
 
     Texture *tex= nullptr;
+
+	float w[3]; // Devin, 齐次坐标归一化前的 w 分量
+
     Triangle();
 
     Eigen::Vector4f a() const { return v[0]; }
@@ -29,9 +35,12 @@ public:
     void setNormal(int ind, Vector3f n); /*set i-th vertex normal vector*/
     void setColor(int ind, float r, float g, float b); /*set i-th vertex color*/
 
+
     void setNormals(const std::array<Vector3f, 3>& normals);
     void setColors(const std::array<Vector3f, 3>& colors);
     void setTexCoord(int ind,Vector2f uv ); /*set i-th vertex texture coordinate*/
+	void setW(int ind, float wCoord); /*set w*/ // Devin
+
     std::array<Vector4f, 3> toVector4() const;
 };
 

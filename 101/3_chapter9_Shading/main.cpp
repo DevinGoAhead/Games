@@ -100,7 +100,7 @@ Eigen::Matrix4f get_projection_matrix(float eye_fov, float aspect_ratio, float z
 				0, 0, 0, 1;
 	orthographicProj = scale * translation;
 	projection = orthographicProj * squish;
-	std::cout << "Matrix:\n" << projection << std::endl;
+	// std::cout << "Matrix:\n" << projection << std::endl;
     return projection;
 }
 
@@ -268,8 +268,6 @@ Eigen::Vector3f phong_fragment_shader(const fragment_shader_payload& payload)
     return result_color * 255.f;
 }
 
-
-
 Eigen::Vector3f displacement_fragment_shader(const fragment_shader_payload& payload)
 {
     
@@ -372,8 +370,6 @@ Eigen::Vector3f displacement_fragment_shader(const fragment_shader_payload& payl
     return result_color * 255.f;
 }
 
-
-
 Eigen::Vector3f bump_fragment_shader(const fragment_shader_payload& payload)
 {
     
@@ -437,11 +433,15 @@ Eigen::Vector3f bump_fragment_shader(const fragment_shader_payload& payload)
 
 	Eigen::Vector3f nMap(-dU, -dV, 1); // 这里推导貌似挺复杂的, 先类比二维理解
 	Eigen::Vector3f nTan =  (TBN * nMap); // 从贴图(uv)空间转换到 切线空间
-	// 这里是否还需要转换到视图空间?
-	Eigen::Vector4f nView(nTan, 0);
-	nView = get_view_matrix * nView;
+	
+	// // 这里是否还需要转换到视图空间?
+	// Eigen::Vector4f nView(nTan, 0);
+	// // 逆转换到模型空间, 逆转换到世界空间, 转换到视图空间
+	// nView = get_view_matrix(eye_pos) * get_model_matrix(140).inverse() * TBN.inverse() * nView; 
+	// nView.normalize();// 单位话
+	// Eigen::Vector3f result_color = nView.head<3>();
 
-    Eigen::Vector3f result_color = nTan;
+	Eigen::Vector3f result_color = nTan;
 
     return result_color * 255.f;
 }
@@ -456,34 +456,35 @@ int main(int argc, const char** argv)
     std::string filename = "output.png"; // 默认输出文件名
     objl::Loader Loader; // 模型加载器
     std::string obj_path = "../models/spot/"; // 模型文件所在路径, 相对路径, 起始路径为main 函数所在路径
-	//std::string obj_path = "D:/LEARN/develop/Games/101/3_chapter9_Shading/models/spot/"; // 为了使用launch.json, 我把这里改为了绝对路径
+ 	//std::string obj_path = "./models/spot/";
 
     // Load .obj File
 	// 将模型从文件加载到内存
 	// 打开后可以看到, 这是一个纯白色的牛
     bool loadout = Loader.LoadFile("../models/spot/spot_triangulated_good.obj"); 
+	//bool loadout = Loader.LoadFile("./models/spot/spot_triangulated_good.obj");
 	// 遍历三角网,  std::vector<Mesh> LoadedMeshes
 	// 这里所有的顶点数据都是存储在一个mesh 中的,可能是为了增强代码的健壮性吧, 这里采用了循环遍历
     for(auto mesh:Loader.LoadedMeshes) 
     {
-		static bool printed_p1 = false;
-	    if (!printed_p1)
-	    {
-	        std::cout << Loader.LoadedMeshes.size() << std::endl; // 1
-	        printed_p1 = true;
-	    }
+		// static bool printed_p1 = false;
+	    // if (!printed_p1)
+	    // {
+	    //     std::cout << Loader.LoadedMeshes.size() << std::endl; // 1
+	    //     printed_p1 = true;
+	    // }
 		// 遍历顶点数组
 		// std::vector<Vertex> Vertices, Vertices 是 Mesh 中的成员, Vertices 中的元素为 struct Vertex
 		// Vertex 的成员是 Vector3 Position, Vector3 Normal, Vector2 TextureCoordinate
 		// 在这里将依次遍历顶点 Vertex, 一次遍历3个
         for(int i=0;i<mesh.Vertices.size();i+=3)
         {
-			static bool printed_p2 = false;
-		    if (!printed_p2)
-		    {
-		        std::cout << mesh.Vertices.size() << std::endl;//17568
-		        printed_p2 = true;
-		    }
+			// static bool printed_p2 = false;
+		    // if (!printed_p2)
+		    // {
+		    //     std::cout << mesh.Vertices.size() << std::endl;//17568
+		    //     printed_p2 = true;
+		    // }
 
             Triangle* t = new Triangle(); // 指针
 

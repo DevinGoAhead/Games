@@ -1,7 +1,6 @@
 //
 // Created by LEI XU on 4/11/19.
 //
-
 #include "Triangle.hpp"
 #include <algorithm>
 #include <array>
@@ -18,6 +17,11 @@ Triangle::Triangle() {
     tex_coords[0] << 0.0, 0.0;
     tex_coords[1] << 0.0, 0.0;
     tex_coords[2] << 0.0, 0.0;
+	
+	// Devin
+	w[0] = 0; 
+	w[1] = 0; 
+	w[2] = 0; 
 }
 
 void Triangle::setVertex(int ind, Vector4f ver){
@@ -62,4 +66,10 @@ void Triangle::setColors(const std::array<Vector3f, 3>& colors)
     setColor(0, colors[0][0], colors[0][1], colors[0][2]);
     setColor(1, colors[1][0], colors[1][1], colors[1][2]);
     setColor(2, colors[2][0], colors[2][1], colors[2][2]);
+}
+
+// Devin
+void Triangle::setW(int ind, float wCoord)
+{
+	w[ind] = wCoord; 
 }
