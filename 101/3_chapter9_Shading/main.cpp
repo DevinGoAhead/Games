@@ -17,7 +17,7 @@ float GetHeight(const fragment_shader_payload& payload, float u, float v)
 {
 	Texture* ptex = payload.texture;
 
-	Eigen:: Vector3f rgb = ptex->getColor(u, v);
+	Eigen:: Vector3f rgb = ptex->getColorBilinear(u, v);
 	//rgb.normalize();
 	// return std::sqrt(rgb.x() * rgb.x() + rgb.y() * rgb.y() +rgb.z() * rgb.z());
 	return rgb.norm();
@@ -139,6 +139,7 @@ Eigen::Vector3f texture_fragment_shader(const fragment_shader_payload& payload)
     {
         // TODO: Get the texture value at the texture coordinates of the current fragment
 		return_color = payload.texture->getColor(payload.tex_coords.x(), payload.tex_coords.y());
+		//return_color = payload.texture->getColorBilinear(payload.tex_coords.x(), payload.tex_coords.y());
     }
     Eigen::Vector3f texture_color;
 	texture_color << return_color.x(), return_color.y(), return_color.z();
@@ -270,7 +271,6 @@ Eigen::Vector3f phong_fragment_shader(const fragment_shader_payload& payload)
 
 Eigen::Vector3f displacement_fragment_shader(const fragment_shader_payload& payload)
 {
-    
     Eigen::Vector3f ka = Eigen::Vector3f(0.005, 0.005, 0.005);
     Eigen::Vector3f kd = payload.color;
     Eigen::Vector3f ks = Eigen::Vector3f(0.7937, 0.7937, 0.7937);
@@ -455,14 +455,14 @@ int main(int argc, const char** argv)
 
     std::string filename = "output.png"; // 默认输出文件名
     objl::Loader Loader; // 模型加载器
-    std::string obj_path = "../models/spot/"; // 模型文件所在路径, 相对路径, 起始路径为main 函数所在路径
- 	//std::string obj_path = "./models/spot/";
+    //std::string obj_path = "../models/spot/"; // 模型文件所在路径, 相对路径, 起始路径为main 函数所在路径
+ 	std::string obj_path = "./models/spot/";
 
     // Load .obj File
 	// 将模型从文件加载到内存
 	// 打开后可以看到, 这是一个纯白色的牛
-    bool loadout = Loader.LoadFile("../models/spot/spot_triangulated_good.obj"); 
-	//bool loadout = Loader.LoadFile("./models/spot/spot_triangulated_good.obj");
+    //bool loadout = Loader.LoadFile("../models/spot/spot_triangulated_good.obj"); 
+	bool loadout = Loader.LoadFile("./models/spot/spot_triangulated_good.obj");
 	// 遍历三角网,  std::vector<Mesh> LoadedMeshes
 	// 这里所有的顶点数据都是存储在一个mesh 中的,可能是为了增强代码的健壮性吧, 这里采用了循环遍历
     for(auto mesh:Loader.LoadedMeshes) 
