@@ -30,21 +30,18 @@ void naive_bezier(const std::vector<cv::Point2f> &points, cv::Mat &window)
     }
 }
 
-// de Casteljau 算法 - 循环
+// de Casteljau 算法 - 递归
 cv::Point2f recursive_bezier(const std::vector<cv::Point2f> &control_points, float t)
 {
-    // TODO: Implement de Casteljau's algorithm
-	std::vector<cv::Point2f> temp_points(control_points);
-	size_t num =  temp_points.size() - 1;  // 末端点的***编号***, 起始编号为0
-	while(num != 0) // 这里num == 0 结束
-	{
-		for (size_t i = 0; i < num; ++i)
-		{
-			temp_points[i] = (1 - t) *  temp_points[i] + t * temp_points[i + 1];
-		}
-		--num;
-	}
-	return  temp_points.front();
+    if (control_points.size() == 1)
+    	return control_points[0];
+
+    std::vector<cv::Point2f> new_points;
+    for (size_t i = 0; i < control_points.size() - 1; ++i) {
+        cv::Point2f point = (1 - t) * control_points[i] + t * control_points[i + 1];
+        new_points.push_back(point);
+    }
+    return recursive_bezier(new_points, t);
 }
 
 void bezier(const std::vector<cv::Point2f> &control_points, cv::Mat &window) 
