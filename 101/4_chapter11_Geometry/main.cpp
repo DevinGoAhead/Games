@@ -30,22 +30,21 @@ void naive_bezier(const std::vector<cv::Point2f> &points, cv::Mat &window)
     }
 }
 
-// 使用定义(伯恩斯坦多项式)绘制 Bezier 曲线
-float BinomCoeffe(size_t n, size_t k)
-{
-	return std::tgamma(n + 1) / (std::tgamma(k + 1) *  std::tgamma(n - k + 1)); // ! / ((n-k)! * (k!))
-}
-
+// de Casteljau 算法 - 循环
 cv::Point2f recursive_bezier(const std::vector<cv::Point2f> &control_points, float t)
 {
-	size_t num = control_points.size() - 1; // 末端点的编号, 起始编号为0
-	cv::Point2f ptAtt(0, 0); // Bezier 曲线在参数为 t 时的点
-	for(int i = 0; i <= num; ++i)
+    // TODO: Implement de Casteljau's algorithm
+	std::vector<cv::Point2f> temp_points(control_points);
+	size_t num =  temp_points.size() - 1;  // 末端点的***编号***, 起始编号为0
+	while(num != 0) // 这里num == 0 结束
 	{
-		float bezierBasis= BinomCoeffe(num, i) * std::pow(t, i) * std::pow(1 - t, num - i); // C^i_n * t^i * (1-t)^(n-i)
-		ptAtt += control_points[i] * bezierBasis;
+		for (size_t i = 0; i < num; ++i)
+		{
+			temp_points[i] = (1 - t) *  temp_points[i] + t * temp_points[i + 1];
+		}
+		--num;
 	}
-    return ptAtt;
+	return  temp_points.front();
 }
 
 void bezier(const std::vector<cv::Point2f> &control_points, cv::Mat &window) 
