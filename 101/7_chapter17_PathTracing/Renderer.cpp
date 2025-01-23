@@ -5,6 +5,11 @@
 #include <fstream>
 #include "Scene.hpp"
 #include "Renderer.hpp"
+// Devin for threads
+//#include <thread>
+#include <mutex>
+#include <vector>
+#include <future>
 
 
 inline float deg2rad(const float& deg) { return deg * M_PI / 180.0; }
@@ -21,27 +26,42 @@ void Renderer::Render(const Scene& scene)
     float scale = tan(deg2rad(scene.fov * 0.5));
     float imageAspectRatio = scene.width / (float)scene.height;
     Vector3f eye_pos(278, 273, -800);
-    int m = 0;
-
+    //int m = 0;
     // change the spp value to change sample ammount
     int spp = 16;
+	int cnt_thread = 4;
+	std::cout << std::thread::hardware_concurrency()<<std::endl;
     std::cout << "SPP: " << spp << "\n";
+	std::cout << "Count of Thread: " << cnt_thread << "\n";
+	
+	std::vector<std::future<void>> futures; // 存储一个未来的结果, 无返回值, 故 void
+	std::mutex mutex_buffer;
     for (uint32_t j = 0; j < scene.height; ++j) {
         for (uint32_t i = 0; i < scene.width; ++i) {
             // generate primary ray direction
+
             float x = (2 * (i + 0.5) / (float)scene.width - 1) *
                       imageAspectRatio * scale;
             float y = (1 - 2 * (j + 0.5) / (float)scene.height) * scale;
 
             Vector3f dir = normalize(Vector3f(-x, y, 1));
-
-            for (int k = 0; k < spp; k++){
-                framebuffer[m] += scene.castRay(Ray(eye_pos, dir), 0) / spp;  
-            }
-            m++;
+			Ray ray(eye_pos, dir);
+			// start, 多线程并发执行
+			futures.push_back(std::async(std::launch::async, [&spp, &cnt_thread, &scene, &ray, &mutex_buffer, &framebuffer, &i, &j](){
+				Vector3f color;
+				for(int k = 0; k < spp/cnt_thread; ++k){
+					color = scene.castRay(ray, 0) / spp;
+				}
+				{
+					const std::lock_guard<std::mutex> lock(mutex_buffer);
+					framebuffer[j * scene.width + i] += color; // 累加到 framebuffer 中
+				}	
+			}));
+			// end, 多线程并发执行
         }
         UpdateProgress(j / (float)scene.height);
     }
+	for(auto& future : futures) {future.wait();} // 等待任务完成退出
     UpdateProgress(1.f);
 
     // save framebuffer to file
