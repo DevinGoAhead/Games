@@ -6,10 +6,12 @@
 #include "Scene.hpp"
 #include "Renderer.hpp"
 // Devin for threads
-//#include <thread>
+#include <thread>
 #include <mutex>
 #include <vector>
-#include <future>
+//#include <functional>
+//#include <memory>
+#include <atomic>
 
 
 inline float deg2rad(const float& deg) { return deg * M_PI / 180.0; }
@@ -28,42 +30,54 @@ void Renderer::Render(const Scene& scene)
     Vector3f eye_pos(278, 273, -800);
     //int m = 0;
     // change the spp value to change sample ammount
-    int spp = 16;
-	int cnt_thread = 4;
-	std::cout << std::thread::hardware_concurrency()<<std::endl;
-    std::cout << "SPP: " << spp << "\n";
+   
+	int cnt_thread = 20;//std::thread::hardware_concurrency(); // 32
+	int spp = 16;
+
 	std::cout << "Count of Thread: " << cnt_thread << "\n";
-	
-	std::vector<std::future<void>> futures; // 存储一个未来的结果, 无返回值, 故 void
-	std::mutex mutex_buffer;
-    for (uint32_t j = 0; j < scene.height; ++j) {
-        for (uint32_t i = 0; i < scene.width; ++i) {
-            // generate primary ray direction
+	std::cout << "SPP: " << spp << "\n";
+	//std::mutex mutex_buffer;
+	int height_block = scene.height / cnt_thread;
+	float unit_progress = 1 / (float)scene.height;
+	std::atomic<float> progress = 0.f;
+	//float process = 0;
+	std::vector<std::thread> threads(cnt_thread);
 
-            float x = (2 * (i + 0.5) / (float)scene.width - 1) *
-                      imageAspectRatio * scale;
-            float y = (1 - 2 * (j + 0.5) / (float)scene.height) * scale;
+	auto castRay_ = [&](int start_height, int end_height){
+	//auto castRay_ = std::function<void(int&, int&)>([&](int& start_height, int& end_height){
+		float local_progress = 0; // 用于当前线程进度计数
+	    for (uint32_t j = start_height; j < end_height; ++j) {
+	        for (uint32_t i = 0; i < scene.width; ++i) {
+	            // generate primary ray direction
 
-            Vector3f dir = normalize(Vector3f(-x, y, 1));
-			Ray ray(eye_pos, dir);
-			// start, 多线程并发执行
-			futures.push_back(std::async(std::launch::async, [&spp, &cnt_thread, &scene, &ray, &mutex_buffer, &framebuffer, &i, &j](){
-				Vector3f color;
-				for(int k = 0; k < spp/cnt_thread; ++k){
-					color = scene.castRay(ray, 0) / spp;
+	            float x = (2 * (i + 0.5) / (float)scene.width - 1) *
+	                      imageAspectRatio * scale;
+	            float y = (1 - 2 * (j + 0.5) / (float)scene.height) * scale;
+
+	            Vector3f dir = normalize(Vector3f(-x, y, 1));
+				Vector3f color(0.f);
+				for(int k = 0; k < spp; ++k){
+					color += scene.castRay(Ray(eye_pos, dir), 0);
 				}
-				{
-					const std::lock_guard<std::mutex> lock(mutex_buffer);
-					framebuffer[j * scene.width + i] += color; // 累加到 framebuffer 中
-				}	
-			}));
-			// end, 多线程并发执行
-        }
-        UpdateProgress(j / (float)scene.height);
-    }
-	for(auto& future : futures) {future.wait();} // 等待任务完成退出
-    UpdateProgress(1.f);
+				framebuffer[j * scene.width + i] = color / spp;
+	        }
+			local_progress += unit_progress;
+	    }
+		progress.fetch_add(local_progress);
+		UpdateProgress(progress.load());
+	};
 
+	for(int t = 0; t < cnt_thread; ++t)
+	{
+		int start_block = t * height_block;
+		int end_block = (t ==  cnt_thread - 1 ? scene.height : start_block + height_block); // 避免无法整除
+		//std::make_shared<std::thread>(castRay_, start_block, end_block);
+		threads[t] = std::thread(castRay_, start_block, end_block);
+	}
+
+	for(auto&thread : threads) {thread.join();}
+	
+	UpdateProgress(1.f);
     // save framebuffer to file
     FILE* fp = fopen("binary.ppm", "wb");
     (void)fprintf(fp, "P6\n%d %d\n255\n", scene.width, scene.height);

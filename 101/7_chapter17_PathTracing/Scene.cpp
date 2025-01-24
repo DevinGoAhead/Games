@@ -35,7 +35,7 @@ void Scene::sampleLight(Intersection &pos, float &pdf) const
         if (objects[k]->hasEmit()){
             emit_area_sum += objects[k]->getArea();
             if (p <= emit_area_sum){
-                objects[k]->Sample(pos, pdf);
+                objects[k]->Sample(pos, pdf);// 调用了MeshTriangle::Sample
                 break;
             }
         }
@@ -86,11 +86,11 @@ Vector3f Scene::castRay(const Ray &ray, int depth) const
 	sampleLight(samp_pos_light, pdf_light); // 获得光源随机采样点的坐标, 法线, pdf, 光强
 	Vector3f light_cord = samp_pos_light.coords;
 	Vector3f light_nor = samp_pos_light.normal;
-	Vector3f light_emit = samp_pos_light.emit;
-
+	Vector3f light_emit = samp_pos_light.emit; // 在meshTriangle 中获取了 材质的 emission 参数
+	//std::cout << light_emit.x <<", " << light_emit.y << ", " << light_emit.z << std::endl;
 	// 阴影测试, p 点与 采样点 之间是否有遮挡
 	Vector3f p2light = light_cord - p_cord; // Vector3f p -> light
-	float distance_p2light = p2light.norm(); // 采样点与P 点距离
+	float distance_p2light = p2light.norm(); // 采样点与P 点距离c
 
 	Vector3f p2light_n = normalize(p2light);// Vector3f p -> light, 归一化
 
@@ -127,5 +127,5 @@ Vector3f Scene::castRay(const Ray &ray, int depth) const
 				L_indir = castRay(ray_p_wo, depth) * p_m->eval(w_any, p_wo, p_nor) * (dotProduct(p_wo, p_nor)) / pdf_p / RussianRoulette;
 		}
 	}
-	return p_m->getEmission() + L_dir + L_indir;
+	return /* p_m->getEmission() + */L_dir + L_indir; // 如果是光源, 就把光源自身的光加进来, 否则光源将显示黑色
 }
