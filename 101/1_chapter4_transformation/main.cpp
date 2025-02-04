@@ -52,7 +52,7 @@ Eigen::Matrix4f get_projection_matrix(float eye_fov, float aspect_ratio,
     // Then return it.
 	//本例给出的 zNear 和 zFar 都是正值(距离), 而推导用的负值(坐标)
 	zNear = -zNear;
-	zFar *= -zFar;
+	zFar *= -1;
 	// Squish - Perspactive Protection to Orthographic Protection
 	Eigen::Matrix4f squish;
  	squish << zNear, 0, 0, 0,
