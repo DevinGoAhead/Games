@@ -127,5 +127,5 @@ Vector3f Scene::castRay(const Ray &ray, int depth) const
 				L_indir = castRay(ray_p_wo, depth) * p_m->eval(w_any, p_wo, p_nor) * (dotProduct(p_wo, p_nor)) / pdf_p / RussianRoulette;
 		}
 	}
-	return /* p_m->getEmission() + */L_dir + L_indir; // 如果是光源, 就把光源自身的光加进来, 否则光源将显示黑色
+	return p_m->getEmission() + L_dir + L_indir; // 如果是光源, 就把光源自身的光加进来, 否则光源与其它材质相同, 不发亮
 }
