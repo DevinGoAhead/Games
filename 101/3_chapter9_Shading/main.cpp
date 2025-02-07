@@ -219,8 +219,8 @@ Eigen::Vector3f phong_fragment_shader(const fragment_shader_payload& payload)
     std::vector<light> lights = {l1, l2}; // 两个光源
     Eigen::Vector3f amb_light_intensity{10, 10, 10}; // 环境光强度
 	// 观察位置坐标
-	// 这里应该是有问题的, 因为shading 是在观察空间进行的, 摄像机的位置应该为(0, 0, 0)
-	// 但是实际测试后, 发现 改为 (0, 0, 0) 也是没有任何变换的, 暂不知原因
+	// 这里应该是有问题的, 因为shading 是在观察空间进行的, model 经过了view 变换, 摄像机也应经过view变换, 即的位置应该为(0, 0, 0)
+	// 但是实际测试后, 发现 改为 (0, 0, 0) 也是没有任何变化的, 暂不知原因
     Eigen::Vector3f eye_pos{0, 0, 10}; // 
 
     float p = 150;
@@ -263,7 +263,7 @@ Eigen::Vector3f phong_fragment_shader(const fragment_shader_payload& payload)
 	lightAtPoint += lightAmb;
 	// 这种方式, 模型本身的颜色仅仅对漫反射光会对有影响, 因为 kd = color;
 	// 而高光, 环境光对模型的颜色似乎并没有产生作用
-	// 这里应该 直接 = 或是 做 .cwiseProduct 运算, 不确定
+	// 这里应该 直接 = 或是 做 .cwiseProduct 运算? 不确定
 	result_color = lightAtPoint; 
 	//result_color = lightAtPoint.cwiseProduct(color);
     return result_color * 255.f;
@@ -434,9 +434,9 @@ Eigen::Vector3f bump_fragment_shader(const fragment_shader_payload& payload)
 	Eigen::Vector3f nMap(-dU, -dV, 1); // 这里推导貌似挺复杂的, 先类比二维理解
 	Eigen::Vector3f nTan =  (TBN * nMap); // 从贴图(uv)空间转换到 切线空间
 	
-	// // 这里是否还需要转换到视图空间?
+	// // 这里是否还需要转换到观察空间?
 	// Eigen::Vector4f nView(nTan, 0);
-	// // 逆转换到模型空间, 逆转换到世界空间, 转换到视图空间
+	// // 逆转换到模型空间, 逆转换到世界空间, 转换到观察空间
 	// nView = get_view_matrix(eye_pos) * get_model_matrix(140).inverse() * TBN.inverse() * nView; 
 	// nView.normalize();// 单位话
 	// Eigen::Vector3f result_color = nView.head<3>();

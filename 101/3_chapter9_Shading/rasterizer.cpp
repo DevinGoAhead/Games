@@ -200,16 +200,20 @@ static std::tuple<float, float, float> computeBarycentric2D(float x, float y, co
 }
 
 void rst::rasterizer::draw(std::vector<Triangle *> &TriangleList) {
-
-    float f1 = (50 - 0.1) / 2.0;
+	// 50 是 zFar, 0.1 是zNear
+	// z 坐标的变化如下
+	// 正交投影的过程是先缩小(zFar - zNear) / 2 倍, 缩小到标准立方体的尺寸范围, 即缩小f1
+	// 然后将标准立方体移动至(0,0)点, 相当于将z范围中点, 即 zNear + (zFar - zNear) / 2 移动至 (0,0)点, 移动了f2
+	// 所以如果要将标准立方体的 z' 恢复至初始z, 则z' 先放大, 然后再移动至原位置, 即 z' * f1 + f2
+    float f1 = (50 - 0.1) / 2.0; 
     float f2 = (50 + 0.1) / 2.0;
 
     Eigen::Matrix4f mvp = projection * view * model;
     for (const auto& t:TriangleList) // TriangleList 存储的是从模型中提取的所有 mesh 的三角形
     {
-        Triangle newtri = *t; // 将当前三角形保存在 newtri 中
+        Triangle newtri = *t; // 将当前三角形的指针保存在 newtri 中
 
-        std::array<Eigen::Vector4f, 3> mm { // 将经过模型变换, 视图变换, 在  ### 视图空间 ###的顶点数据保存在 mm 中
+        std::array<Eigen::Vector4f, 3> mm { // 将经过模型变换, 观察变换, 在  ### 观察空间 ###的顶点数据保存在 mm 中
                 (view * model * t->v[0]),
                 (view * model * t->v[1]),
                 (view * model * t->v[2])
@@ -219,7 +223,7 @@ void rst::rasterizer::draw(std::vector<Triangle *> &TriangleList) {
 		// 将 mm 中的数据, 仅取前3个分量(去掉齐次项) 保存在 viewspace_pos 中
         std::transform(mm.begin(), mm.end(), viewspace_pos.begin(), [](auto& v) {return v.template head<3>();});
 
-        Eigen::Vector4f v[] = { // 将经过 模型, 视图, 投影变换, 在 ### 标准化设备坐标 ### 中的顶点数据, 保存在 v 中
+        Eigen::Vector4f v[] = { // 将经过 模型, 观察, 投影变换, 在 ### 标准化设备坐标 ### 中的顶点数据, 保存在 v 中
                 mvp * t->v[0],
                 mvp * t->v[1],
                 mvp * t->v[2]
@@ -230,14 +234,14 @@ void rst::rasterizer::draw(std::vector<Triangle *> &TriangleList) {
 		newtri.setW(1, v[1].w());
 		newtri.setW(2, v[2].w());
 
-        // Homogeneous division, 经过投影变换后, 齐次坐标将被缩放, w不再为1, 因此这里要做齐次坐标标准化
+        // Homogeneous division, 经过投影变换后, 齐次坐标将被缩放, w不再为1, 因此这里要对 ### 保存在v ### 中的数据做齐次坐标标准化
         for (auto& vec : v) {
             vec.x()/=vec.w();
             vec.y()/=vec.w();
             vec.z()/=vec.w();
         }
 
-		/* 模型已经被转换到视图空间，所以法线也需要进行相同的转换
+		/* 模型已经被转换到观察空间，所以法线也需要进行相同的转换
 		 * 直接应用 view * model 矩阵并不适用于法线的转换
 		 * 详见 onenote 笔记
 		 */
@@ -250,7 +254,8 @@ void rst::rasterizer::draw(std::vector<Triangle *> &TriangleList) {
 
         //Viewport transformation, 视口变换, 这个过程 w 分量并没有改变
 		// 这个过程的变换时线性的, 严格来说, 是仿射的, 三角形虽然形状变换了, 但这是等比的, 位置虽然变换了, 但相对位置没有改变
-        for (auto & vert : v) // 将 v 转换到 屏幕空间中
+		// 本质仍然是对 ### 保存在v ### 中的数据进行的操作
+        for (auto & vert : v)
         {
 			// ### 标准设备坐标系 ### 中的xy 在[-1, 1]范围, + 1 将其调整到[0, 2]范围
 			// 0.5 * width * 2, 将模型从标准化设备坐标系 变换至 屏幕坐标系中
@@ -258,17 +263,18 @@ void rst::rasterizer::draw(std::vector<Triangle *> &TriangleList) {
             vert.y() = 0.5*height*(vert.y()+1.0);
 			// 这里还原 z 值为初始值
 			// 在投影变换, 转换到 ### 标准设备坐标系 ### 时, z 值被压缩到了[-1, 1], 这里调整(放大 + 平移)至 [0.1, 50] 的范围
+			// 详细说明见f1 f2 定义的位置
             vert.z() = vert.z() * f1 + f2;
         }
 
-		// v 现在已经在 ### 屏幕坐标系 ### 了
+		// v 现在已经在 ### 设备坐标系 ### 了
 		// 将 v 的顶点数据, 放到 ~~~ newtri(Triangle) ~~~ 的成员变量  Vector4f v[3] 中
         for (int i = 0; i < 3; ++i)
         {
             //screen space coordinates
             newtri.setVertex(i, v[i]);
         }
-		// 将最中处理完成的 n, 即法线, 放到 ~~~ newtri(Triangle) ~~~ 的成员变量  Vector3f normal[3] 中
+		// 将处理完成的 n, 即法线, 放到 ~~~ newtri(Triangle) ~~~ 的成员变量  Vector3f normal[3] 中
         for (int i = 0; i < 3; ++i)
         {
             //view space normal
@@ -283,11 +289,12 @@ void rst::rasterizer::draw(std::vector<Triangle *> &TriangleList) {
 
         // Also pass view space vertice position
 		/* newtri 的顶点坐标(含齐次项)
-		 * ** 顶点的 xyz 坐标经过了模型, 视图, 投影, 视口 变换, 所以是在屏幕坐标系中的
+		 * ** 顶点的 xyz 坐标经过了模型, 观察, 投影, 视口 变换, 所以是在设备坐标系中的
 		 * ** z 坐标做了特殊处理, 使其在数值上恢复为了 投影变换前的z值
-		 * newtri 的法线经过了 模型, 视图变换
-		 * viewspace_pos 是经过了 模型,视图变换 的顶点坐标(不含齐次项)+
-		 * 可以理解为这两个参数是模型上的同一个点, 前者是屏幕空间的点, 后者是视图空间中的点
+		 * newtri 的法线经过了 模型, 观察变换
+		 
+		 * viewspace_pos 是经过了 模型观察变换 的顶点坐标(不含齐次项)
+		 * 可以理解为这两个参数是模型上的不同阶段的同一个点, 前者是屏幕空间的点, 后者是观察空间中的点
 		 */
         rasterize_triangle(newtri, viewspace_pos);
     }
@@ -362,12 +369,14 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t, const std::array<Eig
 					alpha + beta + gamma < 0.9f
 				)
 				{assert(false);}
-				float z_interpolated = alpha * t.v[0].z() + beta * t.v[1].z() + gamma * t.v[2].z(); // z 插值
-				
+				// z 插值
+				// 虽然是在设备坐标系, 也经过了投影变换, 但 z 已经过处理,恢复到了投影变换前的值
+				float z_interpolated = alpha * t.v[0].z() + beta * t.v[1].z() + gamma * t.v[2].z(); 
+				// 由于投影变换并不会影响顶点颜色, 纹理坐标, 
 				Eigen::Vector3f col_interpolated = alpha * col[0] + beta * col[1] + gamma * col[2]; // 颜色插值
 				Eigen::Vector2f tex_coor_interpolated = alpha * tex_coor[0] + beta * tex_coor[1] + gamma * tex_coor[2]; // 纹理坐标插值
 				// if(tex_coor_interpolated.x() < 0 || tex_coor_interpolated.x() > 1 || tex_coor_interpolated.y() < 0 || tex_coor_interpolated.y() > 1)
-				// 	std::cout << tex_coor_interpolated.x() << ", " << tex_coor_interpolated.y() << std::endl;
+				// std::cout << tex_coor_interpolated.x() << ", " << tex_coor_interpolated.y() << std::endl;
 				if(tex_coor_interpolated.x() < 0) tex_coor_interpolated.x() = 0;
 				if(tex_coor_interpolated.x() > 1) tex_coor_interpolated.x() = 1;
 				if(tex_coor_interpolated.y() < 0) tex_coor_interpolated.y() = 0;
@@ -375,7 +384,8 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t, const std::array<Eig
 				
 				Eigen::Vector3f nor_interpolated = alpha * nor[0] + beta * nor[1] + gamma * nor[2];; // 法线插值
 
-				// 虽然 alpha beta gamma 是经过投影变换(齐次未标准化) 空间的 重心坐标, 但由于相对视空间的变换都是线性的, 因此重心坐标仍然适用
+				// 虽然 alpha beta gamma 是经过投影变换(齐次未标准化) 空间的 重心坐标, 但由于相对观察空间的变换都是线性的, 因此重心坐标仍然适用
+				// 投影变换对顶点坐标的影响很大, 因此点的位置坐标的插值必须使用观察空间, 即未经过投影变换的值进行插值
 				Eigen::Vector3f view_pos_interpolated = alpha * view_pos[0] + beta * view_pos[1] + gamma * view_pos[2];; // 视空间坐标插值
 				
 				// 计算 子像素在临时缓冲区中的索引
