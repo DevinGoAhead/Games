@@ -326,14 +326,14 @@ Eigen::Vector3f displacement_fragment_shader(const fragment_shader_payload& payl
 	float dV = kh * (GetHeight(payload, u, std::min(v + 1.f/ heightImage, 1.f)) - pointHeight);
 
 	Eigen::Vector3f nMap(-dU, -dV, 1);
-	Eigen::Vector3f nTan =  (TBN * nMap).normalized();
+	Eigen::Vector3f nView =  (TBN * nMap).normalized();
 
 	Eigen::Vector3f displacement = kn * n * pointHeight;
 	point += displacement;
 
 
    	Eigen::Vector3f result_color(0,0,0);
-    normal = nTan;
+    normal = nView;
 	Eigen::Vector3f lightAtPoint(0, 0, 0);
 	for (auto& light : lights)
     {
@@ -428,11 +428,11 @@ Eigen::Vector3f bump_fragment_shader(const fragment_shader_payload& payload)
 	float pointHeight = GetHeight(payload, u, v); // uv 位置的高度, 其实是rgb 向量的模
 	
 	// 这里应避免 u + 1.f 越界, v 同理
-	float dU = kh * (GetHeight(payload, std::min(u + 1.f / widthImage, 1.f), v) - pointHeight);
-	float dV = kh * (GetHeight(payload, u, std::min(v + 1.f/ heightImage, 1.f)) - pointHeight);
+	float dU = kh * kn * (GetHeight(payload, std::min(u + 1.f / widthImage, 1.f), v) - pointHeight);
+	float dV = kh *  kn * (GetHeight(payload, u, std::min(v + 1.f/ heightImage, 1.f)) - pointHeight);
 
-	Eigen::Vector3f nMap(-dU, -dV, 1); // 这里推导貌似挺复杂的, 先类比二维理解
-	Eigen::Vector3f nTan =  (TBN * nMap); // 从贴图(uv)空间转换到 切线空间
+	Eigen::Vector3f nMap(-dU, -dV, 1); // 推导见 OneNote
+	Eigen::Vector3f nView = (TBN * nMap); // 从贴图(uv)空间转换到 切线空间
 	
 	// // 这里是否还需要转换到观察空间?
 	// Eigen::Vector4f nView(nTan, 0);
@@ -441,7 +441,7 @@ Eigen::Vector3f bump_fragment_shader(const fragment_shader_payload& payload)
 	// nView.normalize();// 单位话
 	// Eigen::Vector3f result_color = nView.head<3>();
 
-	Eigen::Vector3f result_color = nTan;
+	Eigen::Vector3f result_color = nView.normalized();
 
     return result_color * 255.f;
 }
@@ -455,14 +455,14 @@ int main(int argc, const char** argv)
 
     std::string filename = "output.png"; // 默认输出文件名
     objl::Loader Loader; // 模型加载器
-    //std::string obj_path = "../models/spot/"; // 模型文件所在路径, 相对路径, 起始路径为main 函数所在路径
- 	std::string obj_path = "./models/spot/";
+    std::string obj_path = "../models/spot/"; // 模型文件所在路径, 相对路径, 起始路径为main 函数所在路径
+ 	//std::string obj_path = "./models/spot/";
 
     // Load .obj File
 	// 将模型从文件加载到内存
 	// 打开后可以看到, 这是一个纯白色的牛
-    //bool loadout = Loader.LoadFile("../models/spot/spot_triangulated_good.obj"); 
-	bool loadout = Loader.LoadFile("./models/spot/spot_triangulated_good.obj");
+    bool loadout = Loader.LoadFile("../models/spot/spot_triangulated_good.obj"); 
+	//bool loadout = Loader.LoadFile("./models/spot/spot_triangulated_good.obj");
 	// 遍历三角网,  std::vector<Mesh> LoadedMeshes
 	// 这里所有的顶点数据都是存储在一个mesh 中的,可能是为了增强代码的健壮性吧, 这里采用了循环遍历
     for(auto mesh:Loader.LoadedMeshes) 
