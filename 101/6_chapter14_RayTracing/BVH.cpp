@@ -33,7 +33,7 @@ BVHBuildNode* BVHAccel::recursiveBuild(std::vector<Object*> objects)
     Bounds3 bounds; 
 	// 创建一个能包围当前对象列表中所有对象的最小的包围盒(AABB)
     for (size_t i = 0; i < objects.size(); ++i)
-        bounds = Union(bounds, objects[i]->getBounds()); 
+        bounds = Union(bounds, objects[i]->getBounds()); //两个包围盒构成一个大的包围盒
 	// 如果划分后的包围盒中只有一个对象(即叶子节点, 停止划分, 初始化node)
     if (objects.size() == 1) {
         // Create leaf _BVHBuildNode_
