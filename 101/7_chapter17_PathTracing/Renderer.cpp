@@ -31,8 +31,8 @@ void Renderer::Render(const Scene& scene)
     //int m = 0;
     // change the spp value to change sample ammount
    
-	int cnt_thread = 20;//std::thread::hardware_concurrency(); // 32
-	int spp = 16;
+	int cnt_thread = 24;//std::thread::hardware_concurrency(); // 32
+	int spp = 256;
 
 	std::cout << "Count of Thread: " << cnt_thread << "\n";
 	std::cout << "SPP: " << spp << "\n";
@@ -79,7 +79,7 @@ void Renderer::Render(const Scene& scene)
 	
 	UpdateProgress(1.f);
     // save framebuffer to file
-    FILE* fp = fopen("binary.ppm", "wb");
+    FILE* fp = fopen("binary_256spp.ppm", "wb");
     (void)fprintf(fp, "P6\n%d %d\n255\n", scene.width, scene.height);
     for (auto i = 0; i < scene.height * scene.width; ++i) {
         static unsigned char color[3];
