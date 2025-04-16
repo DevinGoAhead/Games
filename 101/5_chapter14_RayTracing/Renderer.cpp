@@ -157,7 +157,7 @@ Vector3f castRay(
         Vector3f hitPoint = orig + dir * payload->tNear; // o + t * d, 观察位置起点 -> 交点
         Vector3f N; // normal
         Vector2f st; // st coordinates
-		// hitPoint, 交点; dir, 光线方向; index, 交点在"EBO"中的索引; uv, 交点的重心坐标; N, 法向量; st, 纹理坐标(输出型参数)
+		// hitPoint, 交点; dir, 光线方向; index, 交点所属三角形的索引; uv, 交点的重心坐标; N, 法向量; st, 纹理坐标(输出型参数)
 		// 多态调用, 获取 Object 表面属性(好像只获取了纹理坐标?)
         payload->hit_obj->getSurfaceProperties(hitPoint, dir, payload->index, payload->uv, N, st); 
         switch (payload->hit_obj->materialType) {
@@ -219,12 +219,11 @@ Vector3f castRay(
                     lightDir = normalize(lightDir);//单位化光线方向向量
                     float LdotN = std::max(0.f, dotProduct(lightDir, N)); // 光线与法向量夹角的余弦值
                     // is the point in shadow, and is the nearest occluding object closer to the object than the light itself?
-					// 这里是判断光源的光线与 所有 bojects 的交点的, 并且存储最近的点到 tNear
+					// 这里是求解 hitPoint 指向光源方向的一条线与路径中所有 object 相交的最近的交点, 存储在 shadow_res 中
                     auto shadow_res = trace(shadowPointOrig, lightDir, scene.get_objects()); 
-					// 必须至少有相交, hadow_res 才为真
-					// lightDistance 是光源位置到 hitPoint 的距离, 表明hitPoint 是"眼睛"可以看到的第一个点, 即 primary ray 与物体的交点
-					// tNear 是光源与 hitPoint 这条线的路径上,所有相交物体的最近的交点的 z 值
-					// 如果  lightDistance > tNear, 说明官员与hitPoint 之间有其它物体, 则 thiPoint 应该在阴影中
+					// 如果 hadow_res 为真, 说明有交点, 进一步判断相交物体是否在光源与hitPoint之间, 即是否会阻挡光源照射到 hitPoint
+					// shadow_res->tNear 是光源与 hitPoint 这条线的路径上,所有相交物体的最近的交点的 z 值
+					// 如果  lightDistance > tNear, 说明光源与hitPoint 之间有其它物体, 则 thiPoint 应该在阴影中
                     bool inShadow = shadow_res && (shadow_res->tNear * shadow_res->tNear < lightDistance2);
 
 					// 漫反射光强
@@ -245,7 +244,10 @@ Vector3f castRay(
             }
         }
     }
-
+	// 从 default: 中的 hitColor 层层返回
+	// default: hitColor 会直接返回给eye(当hitPoint 对应的ray 直接从由 eye cast)
+	// default: hitColor 会直接返回给 reflection 或 refraction 计算折射或反射的颜色
+	// 然后反折射计算出的 hitColor 会继续返回作为上一层的 折反射颜色计算, 直到最后返回到eye
     return hitColor;
 }
 

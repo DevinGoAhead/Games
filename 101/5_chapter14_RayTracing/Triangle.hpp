@@ -55,7 +55,7 @@ public:
         stCoordinates = std::unique_ptr<Vector2f[]>(new Vector2f[maxIndex]);
         memcpy(stCoordinates.get(), st, sizeof(Vector2f) * maxIndex); // 将顶点的纹理坐标, 从st指向的空间拷贝到 stCoordinates 指向的空间中
     }
-
+	// tnear, uv, index 都是输出型参数
     bool intersect(const Vector3f& orig, const Vector3f& dir, float& tnear, uint32_t& index,
                    Vector2f& uv) const override
     {
@@ -66,7 +66,7 @@ public:
             const Vector3f& v1 = vertices[vertexIndex[k * 3 + 1]];
             const Vector3f& v2 = vertices[vertexIndex[k * 3 + 2]];
             float t, u, v;
-			// t, u, v 均为输出型参数
+			// t, u, v 均为输出型参数, uv 是重心坐标
             if (rayTriangleIntersect(v0, v1, v2, orig, dir, t, u, v) && t < tnear)
             {
                 tnear = t;
@@ -80,7 +80,7 @@ public:
         return intersect;
     }
 
-	// index, 相当于 EBO 中的索引, 用于索引顶点; 
+	// index, 交点所属三角形在 std::vector<vetex>中的的索引, 每3个点对应一个三角形
 	// uv, 重心坐标
 	// N, 法向量; st, 纹理坐标, 输出型参数
     void getSurfaceProperties(const Vector3f&, const Vector3f&, const uint32_t& index, const Vector2f& uv, Vector3f& N,
